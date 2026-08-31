@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cognitive Load Detection</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial;
+            background: linear-gradient(to right, #667eea, #764ba2);
+            color: white;
+            margin-top: 100px;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Cognitive Load Detection System</h1>
+    <p>This application requires access to your camera.</p>
+
+    <button onclick="requestCamera()">Allow Camera Access</button>
+
+    <script>
+        function requestCamera() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    window.location.href = "/detect";
+                })
+                .catch(function(err) {
+                    alert("Camera access denied!");
+                });
+        }
+    </script>
+
+</body>
+</html>

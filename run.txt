@@ -1,0 +1,16 @@
+# Open PowerShell in the project folder
+cd "c:\.Projects\Cognitive load detection"
+
+# Activate the virtual environment
+.\venv\Scripts\Activate.ps1
+
+# Run the Flask app
+python app.py
+
+# Optional: if emotion_model.hdf5 is missing or you want to retrain it
+python train_model.py
+
+# Then open in browser:
+# http://127.0.0.1:5000/
+# http://127.0.0.1:5000/detect
+ 
