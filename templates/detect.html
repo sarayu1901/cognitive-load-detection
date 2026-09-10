@@ -1,85 +1,192 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cognitive Load Detection</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
 
-<title>Cognitive Load Detection</title>
+        h2 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
 
-<style>
+        .video-container {
+            position: relative;
+            display: inline-block;
+            margin-top: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+        }
 
-body{
-text-align:center;
-font-family:Arial;
-background:#f2f2f2;
-}
+        #outputFrame {
+            display: block;
+            max-width: 640px;
+            width: 100%;
+            height: auto;
+            min-height: 360px;
+            border-radius: 12px;
+            object-fit: cover;
+        }
 
-img{
-margin-top:20px;
-border:4px solid black;
-}
+        #loadBadge {
+            font-size: 22px;
+            margin-top: 20px;
+            font-weight: bold;
+        }
 
-#load{
-font-size:22px;
-margin-top:15px;
-}
+        .badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            color: white;
+            background-color: #6c757d;
+        }
 
-#alertBox{
-margin-top:20px;
-font-size:20px;
-color:red;
-font-weight:bold;
-}
+        .badge.Low {
+            background-color: #28a745;
+        }
 
-</style>
+        .badge.Medium {
+            background-color: #007bff;
+        }
 
+        .badge.High {
+            background-color: #dc3545;
+        }
+
+        #alertBox {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 8px;
+            min-width: 300px;
+        }
+
+        #statusText {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
 </head>
 
 <body>
 
-<h2>Real-Time Cognitive Load Detection</h2>
+    <h2>Real-Time Cognitive Load Detection</h2>
+    <div id="statusText">Initializing webcam stream...</div>
 
-<img src="{{ url_for('video') }}">
+    <div class="video-container">
+        <!-- Main display for annotated video stream -->
+        <img id="outputFrame" src="" alt="Webcam Feed Loading...">
+    </div>
 
-<div id="load">Load: Detecting...</div>
+    <!-- Hidden elements for frame capture -->
+    <video id="webcamVideo" autoplay playsinline style="display: none;"></video>
+    <canvas id="captureCanvas" style="display: none;"></canvas>
 
-<div id="alertBox"></div>
+    <div id="loadBadge">Current Load: <span id="loadValue" class="badge">Detecting...</span></div>
+    <div id="alertBox" style="display: none;"></div>
 
-<script>
+    <script>
+        const video = document.getElementById('webcamVideo');
+        const canvas = document.getElementById('captureCanvas');
+        const outputFrame = document.getElementById('outputFrame');
+        const loadValue = document.getElementById('loadValue');
+        const alertBox = document.getElementById('alertBox');
+        const statusText = document.getElementById('statusText');
 
-function updateLoad(){
+        let isProcessing = false;
+        let useFallback = false;
 
-fetch('/load')
-.then(res=>res.json())
-.then(data=>{
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+                });
+                video.srcObject = stream;
+                await video.play();
+                statusText.innerText = "Webcam active. Processing frames...";
+                setInterval(sendFrame, 400); // Send frame every 400ms
+            } catch (err) {
+                console.warn("Client webcam unavailable, using server fallback stream:", err);
+                statusText.innerText = "Client camera unavailable. Connecting to server fallback stream...";
+                useFallback = true;
+                outputFrame.src = "{{ url_for('video') }}";
+                setInterval(pollServerState, 2000);
+            }
+        }
 
-document.getElementById("load").innerText =
-"Current Load: " + data.load;
+        async function sendFrame() {
+            if (isProcessing || useFallback || video.paused || video.ended) return;
 
-});
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-}
+            const imageData = canvas.toDataURL('image/jpeg', 0.7);
+            isProcessing = true;
 
-function updateAlert(){
+            try {
+                const res = await fetch('/detect_frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
 
-fetch('/alert')
-.then(res=>res.json())
-.then(data=>{
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.image) {
+                        outputFrame.src = data.image;
+                    }
+                    updateUI(data.load, data.alert);
+                }
+            } catch (err) {
+                console.error("Error sending frame:", err);
+            } finally {
+                isProcessing = false;
+            }
+        }
 
-if(data.alert !== ""){
+        function pollServerState() {
+            fetch('/load').then(r => r.json()).then(d => {
+                if (d.load) updateUI(d.load, "");
+            });
+            fetch('/alert').then(r => r.json()).then(d => {
+                if (d.alert) alertBox.innerText = "ALERT: " + d.alert;
+            });
+        }
 
-document.getElementById("alertBox").innerText =
-"ALERT: " + data.alert;
+        function updateUI(load, alertMsg) {
+            loadValue.innerText = load || "Detecting...";
+            loadValue.className = "badge " + (load || "");
 
-}
+            if (alertMsg && alertMsg.trim() !== "") {
+                alertBox.innerText = "ALERT: " + alertMsg;
+                alertBox.style.display = "inline-block";
+            } else {
+                alertBox.style.display = "none";
+            }
+        }
 
-});
-
-}
-
-setInterval(updateLoad,2000);
-setInterval(updateAlert,5000);
-
-</script>
+        window.addEventListener('DOMContentLoaded', initCamera);
+    </script>
 
 </body>
 
